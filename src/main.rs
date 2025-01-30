@@ -7,7 +7,7 @@ use std::process::Command;
 use std::path::Path;
 use std::fs;
 use colored::*;
-use crossterm::event::{self, Event, KeyCode};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 fn clear_screen() {
@@ -185,15 +185,27 @@ fn swap_phrases() -> io::Result<()> {
     io::stdout().flush()?;
 
     enable_raw_mode()?;
+    
+    // Wait for the '3' key to be released
+    loop {
+        if let Event::Key(key_event) = event::read()? {
+            if key_event.kind == KeyEventKind::Release && key_event.code == KeyCode::Char('3') {
+                break;
+            }
+        }
+    }
+    
     let selected_idx = loop {
         if let Event::Key(key_event) = event::read()? {
-            if let KeyCode::Char(c) = key_event.code {
-                if let Some(digit) = c.to_digit(10) {
-                    let idx = digit as usize - 1;
-                    if idx < backups.len() {
-                        disable_raw_mode()?;
-                        println!("{}", c);
-                        break idx;
+            if key_event.kind == KeyEventKind::Press {
+                if let KeyCode::Char(c) = key_event.code {
+                    if let Some(digit) = c.to_digit(10) {
+                        let idx = digit as usize - 1;
+                        if idx < backups.len() {
+                            disable_raw_mode()?;
+                            println!("{}", c);
+                            break idx;
+                        }
                     }
                 }
             }
