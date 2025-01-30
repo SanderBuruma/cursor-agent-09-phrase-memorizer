@@ -6,6 +6,7 @@ use rand::thread_rng;
 use std::process::Command;
 use std::path::Path;
 use std::fs;
+use colored::*;
 
 fn clear_screen() {
     if cfg!(target_os = "windows") {
@@ -120,7 +121,7 @@ fn practice_phrase() -> io::Result<()> {
         }
         
         for (i, word) in words.iter().enumerate() {
-            print!("Word {} > ", i + 1);
+            print!("Word {} > ", (i + 1).to_string().cyan());
             io::stdout().flush()?;
             
             let mut input = String::new();
@@ -128,7 +129,7 @@ fn practice_phrase() -> io::Result<()> {
             let input = input.trim();
             
             if input != *word {
-                println!("Incorrect. Starting over...");
+                println!("{}", "Incorrect. Starting over...".red());
                 println!("You had {} successful attempts.", successful_attempts);
                 successful_attempts = 0;  // Reset counter on mistake
                 pause()?;
@@ -137,8 +138,8 @@ fn practice_phrase() -> io::Result<()> {
         }
         
         successful_attempts += 1;
-        println!("\nCongratulations! You've correctly typed all words!");
-        println!("Total successful attempts: {}", successful_attempts);
+        println!("\n{}", "Congratulations! You've correctly typed all words!".green());
+        println!("Total successful attempts: {}", successful_attempts.to_string().yellow());
         pause()?;
         break Ok(());
     }
@@ -170,11 +171,11 @@ fn main() {
 
     loop {
         clear_screen();
-        println!("\nMnemonic Phrase Generator and Practice Tool");
-        println!("----------------------------------------");
-        println!("1. Generate new phrase");
-        println!("2. Practice typing existing phrase");
-        println!("3. Exit");
+        println!("\n{}", "Mnemonic Phrase Generator and Practice Tool".bright_yellow().bold());
+        println!("{}", "----------------------------------------".bright_blue());
+        println!("{}. Generate new phrase", "1".cyan());
+        println!("{}. Practice typing existing phrase", "2".cyan());
+        println!("{}. Exit", "3".cyan());
         print!("\nChoose an option > ");
         io::stdout().flush().unwrap();
 
@@ -186,25 +187,25 @@ fn main() {
                 match read_words() {
                     Ok(words) => {
                         if let Err(e) = generate_new_phrase(&words) {
-                            eprintln!("Error: {}", e);
+                            eprintln!("{}", e.to_string().red());
                             pause().unwrap();
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error reading words: {}", e);
+                        eprintln!("{}", e.to_string().red());
                         pause().unwrap();
                     }
                 }
             }
             "2" => {
                 if let Err(e) = practice_phrase() {
-                    eprintln!("Error: {}", e);
+                    eprintln!("{}", e.to_string().red());
                     pause().unwrap();
                 }
             }
             "3" => break,
             _ => {
-                println!("Invalid choice.");
+                println!("{}", "Invalid choice.".red());
                 pause().unwrap();
             }
         }
