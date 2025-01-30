@@ -5,6 +5,7 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::process::Command;
 use std::path::Path;
+use std::fs;
 
 fn clear_screen() {
     if cfg!(target_os = "windows") {
@@ -41,8 +42,40 @@ fn read_words() -> Result<Vec<String>, Box<dyn Error>> {
     Ok(words)
 }
 
+fn get_next_backup_number() -> io::Result<String> {
+    let mut highest = 0;
+    for entry in fs::read_dir(".")? {
+        let entry = entry?;
+        let name = entry.file_name().into_string().unwrap_or_default();
+        if name.starts_with("phrase.") && name.ends_with(".txt") {
+            if let Some(num_str) = name.strip_prefix("phrase.").and_then(|s| s.strip_suffix(".txt")) {
+                if let Ok(num) = num_str.parse::<u32>() {
+                    highest = highest.max(num);
+                }
+            }
+        }
+    }
+    Ok(format!("{:03}", highest + 1))
+}
+
+fn backup_existing_phrase() -> io::Result<()> {
+    if Path::new("phrase.txt").exists() {
+        let backup_num = get_next_backup_number()?;
+        let backup_name = format!("phrase.{}.txt", backup_num);
+        fs::rename("phrase.txt", backup_name)?;
+    }
+    Ok(())
+}
+
 fn generate_new_phrase(words: &[String]) -> io::Result<()> {
     clear_screen();
+    
+    // Backup existing phrase if it exists
+    if let Err(e) = backup_existing_phrase() {
+        eprintln!("Warning: Could not backup existing phrase: {}", e);
+        pause()?;
+    }
+    
     let phrase = generate_mnemonic_phrase(words, 12);
     println!("Your 12-word mnemonic phrase:");
     
@@ -76,11 +109,15 @@ fn practice_phrase() -> io::Result<()> {
     let mut content = String::new();
     File::open("phrase.txt")?.read_to_string(&mut content)?;
     let words: Vec<&str> = content.lines().collect();
+    let mut successful_attempts = 0;
 
     'practice: loop {
         clear_screen();
         println!("\nType each word and press Enter. Press Ctrl+C to exit.");
         println!("If you make a mistake, you'll need to start over.");
+        if successful_attempts > 0 {
+            println!("Successful attempts: {}", successful_attempts);
+        }
         
         for (i, word) in words.iter().enumerate() {
             print!("Word {} > ", i + 1);
@@ -92,12 +129,16 @@ fn practice_phrase() -> io::Result<()> {
             
             if input != *word {
                 println!("Incorrect. Starting over...");
+                println!("You had {} successful attempts.", successful_attempts);
+                successful_attempts = 0;  // Reset counter on mistake
                 pause()?;
                 continue 'practice;
             }
         }
         
+        successful_attempts += 1;
         println!("\nCongratulations! You've correctly typed all words!");
+        println!("Total successful attempts: {}", successful_attempts);
         pause()?;
         break Ok(());
     }
