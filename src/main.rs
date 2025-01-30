@@ -154,6 +154,79 @@ fn generate_mnemonic_phrase(words: &[String], count: usize) -> Vec<String> {
         .collect()
 }
 
+fn list_backup_phrases() -> io::Result<Vec<String>> {
+    let mut backups = Vec::new();
+    for entry in fs::read_dir(".")? {
+        let entry = entry?;
+        let name = entry.file_name().into_string().unwrap_or_default();
+        if name.starts_with("phrase.") && name.ends_with(".txt") && name != "phrase.txt" {
+            backups.push(name);
+        }
+    }
+    backups.sort();
+    Ok(backups)
+}
+
+fn swap_phrases() -> io::Result<()> {
+    clear_screen();
+    let backups = list_backup_phrases()?;
+    
+    if backups.is_empty() {
+        println!("No backup phrases found to swap with.");
+        pause()?;
+        return Ok(());
+    }
+
+    println!("\n{}", "Available backup phrases:".bright_yellow());
+    for (i, name) in backups.iter().enumerate() {
+        println!("{}. {}", (i + 1).to_string().cyan(), name);
+    }
+    print!("\nSelect backup number to swap with phrase.txt (1-{}) > ", backups.len());
+    io::stdout().flush()?;
+
+    enable_raw_mode()?;
+    let selected_idx = loop {
+        if let Event::Key(key_event) = event::read()? {
+            if let KeyCode::Char(c) = key_event.code {
+                if let Some(digit) = c.to_digit(10) {
+                    let idx = digit as usize - 1;
+                    if idx < backups.len() {
+                        disable_raw_mode()?;
+                        println!("{}", c);
+                        break idx;
+                    }
+                }
+            }
+        }
+    };
+
+    let backup_name = &backups[selected_idx];
+    let temp_name = "phrase.temp.txt";
+
+    // Read both files' contents
+    let mut current_content = String::new();
+    let mut backup_content = String::new();
+    
+    if Path::new("phrase.txt").exists() {
+        File::open("phrase.txt")?.read_to_string(&mut current_content)?;
+    }
+    File::open(backup_name)?.read_to_string(&mut backup_content)?;
+
+    // Write the swapped contents
+    if !current_content.is_empty() {
+        fs::write(temp_name, &current_content)?;
+        fs::write("phrase.txt", &backup_content)?;
+        fs::rename(temp_name, backup_name)?;
+    } else {
+        fs::write("phrase.txt", &backup_content)?;
+        fs::remove_file(backup_name)?;
+    }
+
+    println!("\n{}", "Phrases swapped successfully!".green());
+    pause()?;
+    Ok(())
+}
+
 fn main() -> io::Result<()> {
     // Check for phrase.txt at startup
     if !Path::new("phrase.txt").exists() {
@@ -177,21 +250,19 @@ fn main() -> io::Result<()> {
         println!("{}", "----------------------------------------".bright_blue());
         println!("{}. Generate new phrase", "1".cyan());
         println!("{}. Practice typing existing phrase", "2".cyan());
-        println!("{}. Exit", "3".cyan());
+        println!("{}. Swap with backup phrase", "3".cyan());
+        println!("{}. Exit", "4".cyan());
         print!("\nPress a key to select option > ");
         io::stdout().flush()?;
 
-        // Enable raw mode for immediate key detection
         enable_raw_mode()?;
         
         let key = loop {
             if let Event::Key(key_event) = event::read()? {
                 match key_event.code {
-                    KeyCode::Char('1') | KeyCode::Char('2') | KeyCode::Char('3') => {
+                    KeyCode::Char(c) if c.is_digit(10) && c >= '1' && c <= '4' => {
                         disable_raw_mode()?;
-                        if let KeyCode::Char(c) = key_event.code {
-                            println!("{}", c);
-                        }
+                        println!("{}", c);
                         break key_event.code;
                     }
                     _ => continue,
@@ -220,7 +291,13 @@ fn main() -> io::Result<()> {
                     pause()?;
                 }
             }
-            KeyCode::Char('3') => break,
+            KeyCode::Char('3') => {
+                if let Err(e) = swap_phrases() {
+                    eprintln!("{}", e.to_string().red());
+                    pause()?;
+                }
+            }
+            KeyCode::Char('4') => break,
             _ => unreachable!(),
         }
     }
