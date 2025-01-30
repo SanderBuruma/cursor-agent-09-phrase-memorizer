@@ -7,6 +7,8 @@ use std::process::Command;
 use std::path::Path;
 use std::fs;
 use colored::*;
+use crossterm::event::{self, Event, KeyCode};
+use crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 fn clear_screen() {
     if cfg!(target_os = "windows") {
@@ -152,19 +154,19 @@ fn generate_mnemonic_phrase(words: &[String], count: usize) -> Vec<String> {
         .collect()
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     // Check for phrase.txt at startup
     if !Path::new("phrase.txt").exists() {
         match read_words() {
             Ok(words) => {
                 if let Err(e) = generate_new_phrase(&words) {
                     eprintln!("Error: {}", e);
-                    pause().unwrap();
+                    pause()?;
                 }
             }
             Err(e) => {
                 eprintln!("Error reading words: {}", e);
-                pause().unwrap();
+                pause()?;
             }
         }
     }
@@ -176,38 +178,53 @@ fn main() {
         println!("{}. Generate new phrase", "1".cyan());
         println!("{}. Practice typing existing phrase", "2".cyan());
         println!("{}. Exit", "3".cyan());
-        print!("\nChoose an option > ");
-        io::stdout().flush().unwrap();
+        print!("\nPress a key to select option > ");
+        io::stdout().flush()?;
 
-        let mut choice = String::new();
-        io::stdin().read_line(&mut choice).unwrap();
-
-        match choice.trim() {
-            "1" => {
+        // Enable raw mode for immediate key detection
+        enable_raw_mode()?;
+        
+        let key = loop {
+            if let Event::Key(key_event) = event::read()? {
+                match key_event.code {
+                    KeyCode::Char('1') | KeyCode::Char('2') | KeyCode::Char('3') => {
+                        disable_raw_mode()?;
+                        if let KeyCode::Char(c) = key_event.code {
+                            println!("{}", c);
+                        }
+                        break key_event.code;
+                    }
+                    _ => continue,
+                }
+            }
+        };
+        
+        match key {
+            KeyCode::Char('1') => {
                 match read_words() {
                     Ok(words) => {
                         if let Err(e) = generate_new_phrase(&words) {
                             eprintln!("{}", e.to_string().red());
-                            pause().unwrap();
+                            pause()?;
                         }
                     }
                     Err(e) => {
                         eprintln!("{}", e.to_string().red());
-                        pause().unwrap();
+                        pause()?;
                     }
                 }
             }
-            "2" => {
+            KeyCode::Char('2') => {
                 if let Err(e) = practice_phrase() {
                     eprintln!("{}", e.to_string().red());
-                    pause().unwrap();
+                    pause()?;
                 }
             }
-            "3" => break,
-            _ => {
-                println!("{}", "Invalid choice.".red());
-                pause().unwrap();
-            }
+            KeyCode::Char('3') => break,
+            _ => unreachable!(),
         }
     }
+    Ok(())
 }
+
+
